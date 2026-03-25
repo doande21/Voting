@@ -58,7 +58,6 @@ export default function App() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'home' | 'voting' | 'admin' | 'login'>('home');
-  const [adminLoggedIn, setAdminLoggedIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Auth Listener
@@ -97,14 +96,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Admin Login Check (Specific Credentials)
-  useEffect(() => {
-    const storedAdmin = localStorage.getItem('admin_session');
-    if (storedAdmin === 'true') {
-      setAdminLoggedIn(true);
-    }
-  }, []);
-
   const handleLogin = async (provider: 'google' | 'facebook') => {
     try {
       const p = provider === 'google' ? googleProvider : facebookProvider;
@@ -117,8 +108,6 @@ export default function App() {
 
   const handleLogout = async () => {
     await signOut(auth);
-    localStorage.removeItem('admin_session');
-    setAdminLoggedIn(false);
     setView('home');
   };
 
@@ -157,21 +146,6 @@ export default function App() {
     }
   };
 
-  const handleAdminLogin = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const username = formData.get('username');
-    const password = formData.get('password');
-
-    if (username === 'de2104' && password === '190091') {
-      setAdminLoggedIn(true);
-      localStorage.setItem('admin_session', 'true');
-      setView('admin');
-    } else {
-      alert('Sai tài khoản hoặc mật khẩu admin!');
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
@@ -194,7 +168,7 @@ export default function App() {
             <div className="hidden md:flex items-center gap-8">
               <button onClick={() => setView('home')} className={cn("text-sm font-medium transition-colors", view === 'home' ? "text-orange-500" : "text-neutral-500 hover:text-neutral-900")}>Trang chủ</button>
               <button onClick={() => setView('voting')} className={cn("text-sm font-medium transition-colors", view === 'voting' ? "text-orange-500" : "text-neutral-500 hover:text-neutral-900")}>Bình chọn</button>
-              {(userData?.role === 'admin' || adminLoggedIn) && (
+              {userData?.role === 'admin' && (
                 <button onClick={() => setView('admin')} className={cn("text-sm font-medium transition-colors", view === 'admin' ? "text-orange-500" : "text-neutral-500 hover:text-neutral-900")}>Quản lý</button>
               )}
             </div>
@@ -223,8 +197,8 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {view === 'home' && <HomeView setView={setView} candidates={candidates} />}
         {view === 'voting' && <VotingView candidates={candidates} onVote={handleVote} user={user} />}
-        {view === 'admin' && (adminLoggedIn || userData?.role === 'admin' ? <AdminView candidates={candidates} /> : <AdminLoginForm onLogin={handleAdminLogin} />)}
-        {view === 'login' && <LoginView onLogin={handleLogin} onAdminLogin={() => setView('admin')} />}
+        {view === 'admin' && (userData?.role === 'admin' ? <AdminView candidates={candidates} /> : <div className="text-center py-20 text-neutral-500">Bạn không có quyền truy cập trang này.</div>)}
+        {view === 'login' && <LoginView onLogin={handleLogin} />}
       </main>
 
       <footer className="bg-white border-t border-neutral-200 py-12 mt-12">
@@ -364,7 +338,7 @@ function VotingView({ candidates, onVote, user }: { candidates: Candidate[], onV
   );
 }
 
-function LoginView({ onLogin, onAdminLogin }: { onLogin: (p: any) => void, onAdminLogin: () => void }) {
+function LoginView({ onLogin }: { onLogin: (p: any) => void }) {
   return (
     <div className="max-w-md mx-auto py-20 space-y-8">
       <div className="text-center space-y-2">
@@ -375,76 +349,62 @@ function LoginView({ onLogin, onAdminLogin }: { onLogin: (p: any) => void, onAdm
       <div className="space-y-4">
         <button 
           onClick={() => onLogin('google')}
-          className="w-full flex items-center justify-center gap-3 bg-white border border-neutral-200 py-4 rounded-2xl font-medium hover:bg-neutral-50 transition-colors"
+          className="w-full flex items-center justify-center gap-3 bg-white border-2 border-neutral-900 py-5 rounded-2xl font-bold hover:bg-neutral-50 active:scale-[0.98] transition-all shadow-md"
         >
-          <img src="https://www.google.com/favicon.ico" className="h-5 w-5" alt="Google" />
+          <svg className="h-6 w-6" viewBox="0 0 24 24">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
           Tiếp tục với Google
         </button>
         <button 
           onClick={() => onLogin('facebook')}
-          className="w-full flex items-center justify-center gap-3 bg-[#1877F2] text-white py-4 rounded-2xl font-medium hover:bg-[#166fe5] transition-colors"
+          className="w-full flex items-center justify-center gap-3 bg-[#1877F2] text-white py-5 rounded-2xl font-bold hover:bg-[#166fe5] active:scale-[0.98] transition-all shadow-md"
         >
-          <img src="https://www.facebook.com/favicon.ico" className="h-5 w-5 brightness-0 invert" alt="Facebook" />
+          <svg className="h-6 w-6 fill-current" viewBox="0 0 24 24">
+            <path d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.03 1.764-5.908 5.73-5.908 1.202 0 2.247.086 2.548.126v2.95h-1.745c-1.956 0-2.334.926-2.334 2.29v1.122h4.312l-.56 3.667h-3.752v7.98H9.101z"/>
+          </svg>
           Tiếp tục với Facebook
         </button>
       </div>
-
-      <div className="pt-8 border-t border-neutral-200 text-center">
-        <button onClick={onAdminLogin} className="text-sm text-neutral-400 hover:text-neutral-900 transition-colors">
-          Đăng nhập quản trị viên
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function AdminLoginForm({ onLogin }: { onLogin: (e: any) => void }) {
-  return (
-    <div className="max-w-md mx-auto py-20 space-y-8">
-      <div className="text-center space-y-2">
-        <h2 className="text-3xl font-bold">Quản trị viên</h2>
-        <p className="text-neutral-500">Nhập tài khoản và mật khẩu hệ thống</p>
-      </div>
-      
-      <form onSubmit={onLogin} className="space-y-4">
-        <div className="space-y-1">
-          <label className="text-xs font-bold text-neutral-400 uppercase ml-1">Tài khoản</label>
-          <input 
-            name="username" 
-            type="text" 
-            required 
-            className="w-full px-4 py-3 bg-white border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-bold text-neutral-400 uppercase ml-1">Mật khẩu</label>
-          <input 
-            name="password" 
-            type="password" 
-            required 
-            className="w-full px-4 py-3 bg-white border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
-        </div>
-        <button type="submit" className="w-full bg-neutral-900 text-white py-4 rounded-xl font-bold hover:bg-neutral-800 transition-colors">
-          Đăng nhập hệ thống
-        </button>
-      </form>
     </div>
   );
 }
 
 function AdminView({ candidates }: { candidates: Candidate[] }) {
   const [showAdd, setShowAdd] = useState(false);
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserData[]>([]);
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      const q = query(collection(db, 'users'), orderBy('displayName'));
-      const snapshot = await getDocs(q);
-      setUsers(snapshot.docs.map(d => d.data()));
-    };
-    fetchUsers();
+    const q = query(collection(db, 'users'), orderBy('displayName'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setUsers(snapshot.docs.map(d => d.data() as UserData));
+    });
+    return () => unsubscribe();
   }, []);
+
+  const toggleUserRole = async (targetUser: UserData) => {
+    if (targetUser.email === 'doandeqn123@gmail.com') {
+      alert('Không thể thay đổi quyền của Admin gốc!');
+      return;
+    }
+
+    const newRole = targetUser.role === 'admin' ? 'user' : 'admin';
+    const confirmMsg = `Bạn có chắc chắn muốn ${newRole === 'admin' ? 'nâng cấp' : 'hạ cấp'} người dùng ${targetUser.displayName}?`;
+    
+    if (confirm(confirmMsg)) {
+      try {
+        await updateDoc(doc(db, 'users', targetUser.uid), {
+          role: newRole
+        });
+        alert('Cập nhật quyền thành công!');
+      } catch (err) {
+        alert('Lỗi khi cập nhật quyền');
+      }
+    }
+  };
 
   const handleAddCandidate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -565,7 +525,7 @@ function AdminView({ candidates }: { candidates: Candidate[] }) {
           </h3>
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 space-y-4 max-h-[600px] overflow-y-auto">
             {users.map((u, i) => (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-neutral-50 transition-colors">
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-neutral-50 transition-colors group">
                 <div className="h-10 w-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold">
                   {u.displayName?.[0] || 'U'}
                 </div>
@@ -573,9 +533,19 @@ function AdminView({ candidates }: { candidates: Candidate[] }) {
                   <p className="text-sm font-bold truncate">{u.displayName}</p>
                   <p className="text-xs text-neutral-500 truncate">{u.email}</p>
                 </div>
-                <span className={cn("text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-tighter", u.role === 'admin' ? "bg-red-100 text-red-600" : "bg-neutral-100 text-neutral-500")}>
-                  {u.role}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className={cn("text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-tighter", u.role === 'admin' ? "bg-red-100 text-red-600" : "bg-neutral-100 text-neutral-500")}>
+                    {u.role}
+                  </span>
+                  {u.email !== 'doandeqn123@gmail.com' && (
+                    <button 
+                      onClick={() => toggleUserRole(u)}
+                      className="text-[10px] font-bold text-orange-500 hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      {u.role === 'admin' ? 'Hạ cấp' : 'Nâng cấp'}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
