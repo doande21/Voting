@@ -5,6 +5,8 @@ import {
   googleProvider, 
   facebookProvider, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signOut, 
   onAuthStateChanged, 
   collection, 
@@ -64,6 +66,12 @@ export default function App() {
   useEffect(() => {
     let unsubscribeUserDoc: (() => void) | null = null;
 
+    // Handle redirect result
+    getRedirectResult(auth).catch(err => {
+      console.error('Redirect login error:', err);
+      setError(err.message);
+    });
+
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
@@ -82,6 +90,7 @@ export default function App() {
             await setDoc(userDocRef, newUserData);
             setUserData(newUserData);
           }
+          
           setLoading(false);
         });
       } else {
@@ -96,6 +105,13 @@ export default function App() {
     };
   }, []);
 
+  // Redirect away from login if user is present
+  useEffect(() => {
+    if (user && view === 'login') {
+      setView('voting');
+    }
+  }, [user, view]);
+
   // Candidates Listener
   useEffect(() => {
     const q = query(collection(db, 'candidates'), orderBy('voteCount', 'desc'));
@@ -109,9 +125,18 @@ export default function App() {
   const handleLogin = async (provider: 'google' | 'facebook') => {
     try {
       const p = provider === 'google' ? googleProvider : facebookProvider;
-      await signInWithPopup(auth, p);
-      setView('voting');
+      
+      // Use redirect for mobile, popup for desktop
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+      
+      if (isMobile) {
+        await signInWithRedirect(auth, p);
+      } else {
+        await signInWithPopup(auth, p);
+        setView('voting');
+      }
     } catch (err: any) {
+      console.error('Login error:', err);
       setError(err.message);
     }
   };
@@ -123,6 +148,7 @@ export default function App() {
 
   const handleVote = async (candidateId: string) => {
     if (!user) {
+      setError(null);
       setView('login');
       return;
     }
@@ -195,7 +221,7 @@ export default function App() {
                   </button>
                 </div>
               ) : (
-                <button onClick={() => setView('login')} className="bg-orange-500 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-orange-600 transition-colors flex items-center gap-2">
+                <button onClick={() => { setError(null); setView('login'); }} className="bg-orange-500 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-orange-600 transition-colors flex items-center gap-2">
                   <LogIn className="h-4 w-4" /> Đăng nhập
                 </button>
               )}
@@ -205,10 +231,10 @@ export default function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {view === 'home' && <HomeView setView={setView} candidates={candidates} />}
+        {view === 'home' && <HomeView setView={setView} candidates={candidates} setError={setError} />}
         {view === 'voting' && <VotingView candidates={candidates} onVote={handleVote} user={user} />}
         {view === 'admin' && (userData?.role === 'admin' ? <AdminView candidates={candidates} /> : <div className="text-center py-20 text-neutral-500">Bạn không có quyền truy cập trang này.</div>)}
-        {view === 'login' && <LoginView onLogin={handleLogin} />}
+        {view === 'login' && <LoginView onLogin={handleLogin} error={error} />}
       </main>
 
       <footer className="bg-white border-t border-neutral-200 py-12 mt-12">
@@ -222,7 +248,7 @@ export default function App() {
 
 // --- View Components ---
 
-function HomeView({ setView, candidates }: { setView: (v: any) => void, candidates: Candidate[] }) {
+function HomeView({ setView, candidates, setError }: { setView: (v: any) => void, candidates: Candidate[], setError: (e: string | null) => void }) {
   const topCandidates = candidates.slice(0, 3);
 
   return (
@@ -236,7 +262,7 @@ function HomeView({ setView, candidates }: { setView: (v: any) => void, candidat
           Cổng bình chọn chính thức cho cuộc thi tài năng sinh viên. Mỗi tài khoản có 1 lượt bình chọn mỗi ngày.
         </p>
         <div className="flex justify-center gap-4 pt-4">
-          <button onClick={() => setView('voting')} className="bg-neutral-900 text-white px-8 py-4 rounded-full font-bold hover:bg-neutral-800 transition-all transform hover:scale-105">
+          <button onClick={() => { setError(null); setView('voting'); }} className="bg-neutral-900 text-white px-8 py-4 rounded-full font-bold hover:bg-neutral-800 transition-all transform hover:scale-105">
             Bình chọn ngay
           </button>
         </div>
@@ -348,13 +374,19 @@ function VotingView({ candidates, onVote, user }: { candidates: Candidate[], onV
   );
 }
 
-function LoginView({ onLogin }: { onLogin: (p: any) => void }) {
+function LoginView({ onLogin, error }: { onLogin: (p: any) => void, error: string | null }) {
   return (
     <div className="max-w-md mx-auto py-20 space-y-8">
       <div className="text-center space-y-2">
         <h2 className="text-3xl font-bold">Đăng nhập để bình chọn</h2>
         <p className="text-neutral-500">Mỗi tài khoản được bình chọn 1 lần mỗi ngày</p>
       </div>
+      
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm font-medium">
+          {error}
+        </div>
+      )}
       
       <div className="space-y-4">
         <button 
