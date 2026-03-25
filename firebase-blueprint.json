@@ -1,0 +1,56 @@
+{
+  "entities": {
+    "Candidate": {
+      "title": "Candidate",
+      "description": "A candidate in the voting competition.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name of the candidate" },
+        "mssv": { "type": "string", "description": "Student ID (MSSV)" },
+        "content": { "type": "string", "description": "Competition content/description" },
+        "voteCount": { "type": "integer", "description": "Current number of votes" },
+        "imageUrl": { "type": "string", "description": "URL of the candidate's image" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "mssv", "content", "voteCount"]
+    },
+    "Vote": {
+      "title": "Vote",
+      "description": "A vote cast by a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "ID of the user who voted" },
+        "candidateId": { "type": "string", "description": "ID of the candidate voted for" },
+        "date": { "type": "string", "description": "Date of the vote (YYYY-MM-DD)" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "candidateId", "date", "timestamp"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A registered user.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "User's email" },
+        "displayName": { "type": "string", "description": "User's display name" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User's role" },
+        "lastVotedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "displayName", "role"]
+    }
+  },
+  "firestore": {
+    "/candidates/{candidateId}": {
+      "schema": "Candidate",
+      "description": "Collection of candidates"
+    },
+    "/votes/{voteId}": {
+      "schema": "Vote",
+      "description": "Collection of votes (ID: userId_date)"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of users"
+    }
+  }
+}

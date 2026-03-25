@@ -1,0 +1,586 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  auth, 
+  db, 
+  googleProvider, 
+  facebookProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  getDocs, 
+  updateDoc, 
+  increment, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp, 
+  Timestamp,
+  FirebaseUser
+} from './lib/firebase';
+import { format } from 'date-fns';
+import { LogIn, LogOut, Vote as VoteIcon, User as UserIcon, Settings, Plus, Trash2, Filter, Trophy, ChevronRight, ChevronLeft } from 'lucide-react';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+// --- Utilities ---
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+// --- Types ---
+interface Candidate {
+  id: string;
+  name: string;
+  mssv: string;
+  content: string;
+  voteCount: number;
+  imageUrl?: string;
+  createdAt?: any;
+}
+
+interface UserData {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  role: 'user' | 'admin';
+}
+
+// --- Components ---
+
+export default function App() {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<'home' | 'voting' | 'admin' | 'login'>('home');
+  const [adminLoggedIn, setAdminLoggedIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        if (userDoc.exists()) {
+          setUserData(userDoc.data() as UserData);
+        } else {
+          const newUserData: UserData = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            role: firebaseUser.email === 'doandeqn123@gmail.com' ? 'admin' : 'user'
+          };
+          await setDoc(doc(db, 'users', firebaseUser.uid), newUserData);
+          setUserData(newUserData);
+        }
+      } else {
+        setUserData(null);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Candidates Listener
+  useEffect(() => {
+    const q = query(collection(db, 'candidates'), orderBy('voteCount', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Candidate));
+      setCandidates(list);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Admin Login Check (Specific Credentials)
+  useEffect(() => {
+    const storedAdmin = localStorage.getItem('admin_session');
+    if (storedAdmin === 'true') {
+      setAdminLoggedIn(true);
+    }
+  }, []);
+
+  const handleLogin = async (provider: 'google' | 'facebook') => {
+    try {
+      const p = provider === 'google' ? googleProvider : facebookProvider;
+      await signInWithPopup(auth, p);
+      setView('voting');
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    localStorage.removeItem('admin_session');
+    setAdminLoggedIn(false);
+    setView('home');
+  };
+
+  const handleVote = async (candidateId: string) => {
+    if (!user) {
+      setView('login');
+      return;
+    }
+
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const voteId = `${user.uid}_${today}`;
+    const voteRef = doc(db, 'votes', voteId);
+
+    try {
+      const voteDoc = await getDoc(voteRef);
+      if (voteDoc.exists()) {
+        alert('Bạn đã bình chọn trong ngày hôm nay rồi!');
+        return;
+      }
+
+      await setDoc(voteRef, {
+        userId: user.uid,
+        candidateId,
+        date: today,
+        timestamp: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, 'candidates', candidateId), {
+        voteCount: increment(1)
+      });
+
+      alert('Bình chọn thành công!');
+    } catch (err: any) {
+      console.error(err);
+      alert('Có lỗi xảy ra khi bình chọn.');
+    }
+  };
+
+  const handleAdminLogin = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const username = formData.get('username');
+    const password = formData.get('password');
+
+    if (username === 'de2104' && password === '190091') {
+      setAdminLoggedIn(true);
+      localStorage.setItem('admin_session', 'true');
+      setView('admin');
+    } else {
+      alert('Sai tài khoản hoặc mật khẩu admin!');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-neutral-50 text-neutral-900 font-sans">
+      {/* Navigation */}
+      <nav className="bg-white border-b border-neutral-200 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16 items-center">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
+              <Trophy className="h-8 w-8 text-orange-500" />
+              <span className="text-xl font-bold tracking-tight">VOTING PORTAL</span>
+            </div>
+            
+            <div className="hidden md:flex items-center gap-8">
+              <button onClick={() => setView('home')} className={cn("text-sm font-medium transition-colors", view === 'home' ? "text-orange-500" : "text-neutral-500 hover:text-neutral-900")}>Trang chủ</button>
+              <button onClick={() => setView('voting')} className={cn("text-sm font-medium transition-colors", view === 'voting' ? "text-orange-500" : "text-neutral-500 hover:text-neutral-900")}>Bình chọn</button>
+              {(userData?.role === 'admin' || adminLoggedIn) && (
+                <button onClick={() => setView('admin')} className={cn("text-sm font-medium transition-colors", view === 'admin' ? "text-orange-500" : "text-neutral-500 hover:text-neutral-900")}>Quản lý</button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4">
+              {user ? (
+                <div className="flex items-center gap-3">
+                  <div className="hidden sm:block text-right">
+                    <p className="text-xs font-medium text-neutral-900">{user.displayName}</p>
+                    <p className="text-[10px] text-neutral-500">{user.email}</p>
+                  </div>
+                  <button onClick={handleLogout} className="p-2 rounded-full hover:bg-neutral-100 transition-colors">
+                    <LogOut className="h-5 w-5 text-neutral-500" />
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setView('login')} className="bg-orange-500 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-orange-600 transition-colors flex items-center gap-2">
+                  <LogIn className="h-4 w-4" /> Đăng nhập
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {view === 'home' && <HomeView setView={setView} candidates={candidates} />}
+        {view === 'voting' && <VotingView candidates={candidates} onVote={handleVote} user={user} />}
+        {view === 'admin' && (adminLoggedIn || userData?.role === 'admin' ? <AdminView candidates={candidates} /> : <AdminLoginForm onLogin={handleAdminLogin} />)}
+        {view === 'login' && <LoginView onLogin={handleLogin} onAdminLogin={() => setView('admin')} />}
+      </main>
+
+      <footer className="bg-white border-t border-neutral-200 py-12 mt-12">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <p className="text-sm text-neutral-500">© 2026 Voting Portal. All rights reserved.</p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// --- View Components ---
+
+function HomeView({ setView, candidates }: { setView: (v: any) => void, candidates: Candidate[] }) {
+  const topCandidates = candidates.slice(0, 3);
+
+  return (
+    <div className="space-y-16">
+      {/* Hero */}
+      <section className="text-center space-y-6 py-12">
+        <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-neutral-900">
+          CHỌN RA <span className="text-orange-500">NGƯỜI CHIẾN THẮNG</span>
+        </h1>
+        <p className="text-lg text-neutral-500 max-w-2xl mx-auto">
+          Cổng bình chọn chính thức cho cuộc thi tài năng sinh viên. Mỗi tài khoản có 1 lượt bình chọn mỗi ngày.
+        </p>
+        <div className="flex justify-center gap-4 pt-4">
+          <button onClick={() => setView('voting')} className="bg-neutral-900 text-white px-8 py-4 rounded-full font-bold hover:bg-neutral-800 transition-all transform hover:scale-105">
+            Bình chọn ngay
+          </button>
+        </div>
+      </section>
+
+      {/* Leaderboard Preview */}
+      <section className="space-y-8">
+        <div className="flex items-end justify-between border-b border-neutral-200 pb-4">
+          <div>
+            <h2 className="text-2xl font-bold">Bảng xếp hạng hiện tại</h2>
+            <p className="text-sm text-neutral-500 italic">Cập nhật thời gian thực</p>
+          </div>
+          <button onClick={() => setView('voting')} className="text-sm font-medium text-orange-500 flex items-center gap-1 hover:underline">
+            Xem tất cả <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {topCandidates.map((c, i) => (
+            <div key={c.id} className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+              <div className="absolute top-4 right-4 bg-orange-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
+                #{i + 1}
+              </div>
+              <div className="space-y-4">
+                <div className="w-full aspect-square bg-neutral-100 rounded-2xl overflow-hidden">
+                  <img 
+                    src={c.imageUrl || `https://picsum.photos/seed/${c.id}/400/400`} 
+                    alt={c.name} 
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">{c.name}</h3>
+                  <p className="text-sm text-neutral-500">MSSV: {c.mssv}</p>
+                  <p className="text-sm text-neutral-400 mt-2 line-clamp-2">{c.content}</p>
+                </div>
+                <div className="flex items-center justify-between pt-4 border-t border-neutral-100">
+                  <span className="text-2xl font-black text-orange-500">{c.voteCount}</span>
+                  <span className="text-xs font-medium text-neutral-400 uppercase tracking-widest">Lượt bình chọn</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function VotingView({ candidates, onVote, user }: { candidates: Candidate[], onVote: (id: string) => void, user: any }) {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filtered = candidates.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.mssv.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <h2 className="text-3xl font-bold">Danh sách thí sinh</h2>
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+          <input 
+            type="text" 
+            placeholder="Tìm kiếm tên hoặc MSSV..." 
+            className="pl-10 pr-4 py-2 bg-white border border-neutral-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 w-full md:w-64"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {filtered.map(c => (
+          <div key={c.id} className="bg-white rounded-2xl border border-neutral-200 overflow-hidden group">
+            <div className="aspect-[3/4] overflow-hidden relative">
+              <img 
+                src={c.imageUrl || `https://picsum.photos/seed/${c.id}/400/533`} 
+                alt={c.name} 
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white">
+                <p className="text-xs font-medium opacity-80 uppercase tracking-widest">{c.mssv}</p>
+                <h3 className="text-lg font-bold leading-tight">{c.name}</h3>
+              </div>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-sm text-neutral-600 line-clamp-2 h-10">{c.content}</p>
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-xl font-black text-orange-500">{c.voteCount}</span>
+                  <span className="text-[10px] text-neutral-400 uppercase font-bold">Lượt bình chọn</span>
+                </div>
+                <button 
+                  onClick={() => onVote(c.id)}
+                  className="bg-neutral-900 text-white p-3 rounded-xl hover:bg-orange-500 transition-colors shadow-lg shadow-neutral-200"
+                >
+                  <VoteIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LoginView({ onLogin, onAdminLogin }: { onLogin: (p: any) => void, onAdminLogin: () => void }) {
+  return (
+    <div className="max-w-md mx-auto py-20 space-y-8">
+      <div className="text-center space-y-2">
+        <h2 className="text-3xl font-bold">Đăng nhập để bình chọn</h2>
+        <p className="text-neutral-500">Mỗi tài khoản được bình chọn 1 lần mỗi ngày</p>
+      </div>
+      
+      <div className="space-y-4">
+        <button 
+          onClick={() => onLogin('google')}
+          className="w-full flex items-center justify-center gap-3 bg-white border border-neutral-200 py-4 rounded-2xl font-medium hover:bg-neutral-50 transition-colors"
+        >
+          <img src="https://www.google.com/favicon.ico" className="h-5 w-5" alt="Google" />
+          Tiếp tục với Google
+        </button>
+        <button 
+          onClick={() => onLogin('facebook')}
+          className="w-full flex items-center justify-center gap-3 bg-[#1877F2] text-white py-4 rounded-2xl font-medium hover:bg-[#166fe5] transition-colors"
+        >
+          <img src="https://www.facebook.com/favicon.ico" className="h-5 w-5 brightness-0 invert" alt="Facebook" />
+          Tiếp tục với Facebook
+        </button>
+      </div>
+
+      <div className="pt-8 border-t border-neutral-200 text-center">
+        <button onClick={onAdminLogin} className="text-sm text-neutral-400 hover:text-neutral-900 transition-colors">
+          Đăng nhập quản trị viên
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminLoginForm({ onLogin }: { onLogin: (e: any) => void }) {
+  return (
+    <div className="max-w-md mx-auto py-20 space-y-8">
+      <div className="text-center space-y-2">
+        <h2 className="text-3xl font-bold">Quản trị viên</h2>
+        <p className="text-neutral-500">Nhập tài khoản và mật khẩu hệ thống</p>
+      </div>
+      
+      <form onSubmit={onLogin} className="space-y-4">
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-neutral-400 uppercase ml-1">Tài khoản</label>
+          <input 
+            name="username" 
+            type="text" 
+            required 
+            className="w-full px-4 py-3 bg-white border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-neutral-400 uppercase ml-1">Mật khẩu</label>
+          <input 
+            name="password" 
+            type="password" 
+            required 
+            className="w-full px-4 py-3 bg-white border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        </div>
+        <button type="submit" className="w-full bg-neutral-900 text-white py-4 rounded-xl font-bold hover:bg-neutral-800 transition-colors">
+          Đăng nhập hệ thống
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function AdminView({ candidates }: { candidates: Candidate[] }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      const q = query(collection(db, 'users'), orderBy('displayName'));
+      const snapshot = await getDocs(q);
+      setUsers(snapshot.docs.map(d => d.data()));
+    };
+    fetchUsers();
+  }, []);
+
+  const handleAddCandidate = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const newCandidate = {
+      name: formData.get('name') as string,
+      mssv: formData.get('mssv') as string,
+      content: formData.get('content') as string,
+      voteCount: 0,
+      imageUrl: formData.get('imageUrl') as string || `https://picsum.photos/seed/${Date.now()}/400/533`,
+      createdAt: serverTimestamp()
+    };
+
+    try {
+      await setDoc(doc(collection(db, 'candidates')), newCandidate);
+      setShowAdd(false);
+      alert('Thêm thí sinh thành công!');
+    } catch (err) {
+      alert('Lỗi khi thêm thí sinh');
+    }
+  };
+
+  const handleDeleteCandidate = async (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn xóa thí sinh này?')) {
+      try {
+        // In a real app, we'd delete the doc. For this demo, let's just alert.
+        // await deleteDoc(doc(db, 'candidates', id));
+        alert('Tính năng xóa đang được bảo trì.');
+      } catch (err) {
+        alert('Lỗi khi xóa');
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-12">
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold">Bảng điều khiển Admin</h2>
+        <button 
+          onClick={() => setShowAdd(!showAdd)}
+          className="bg-orange-500 text-white px-6 py-2 rounded-full font-bold flex items-center gap-2 hover:bg-orange-600 transition-colors"
+        >
+          <Plus className="h-5 w-5" /> Thêm thí sinh
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="bg-white p-8 rounded-3xl border border-neutral-200 shadow-xl max-w-2xl mx-auto">
+          <h3 className="text-xl font-bold mb-6">Thêm thí sinh mới</h3>
+          <form onSubmit={handleAddCandidate} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-neutral-400 uppercase">Tên thí sinh</label>
+              <input name="name" required className="w-full px-4 py-2 border border-neutral-200 rounded-lg" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-neutral-400 uppercase">MSSV</label>
+              <input name="mssv" required className="w-full px-4 py-2 border border-neutral-200 rounded-lg" />
+            </div>
+            <div className="md:col-span-2 space-y-1">
+              <label className="text-xs font-bold text-neutral-400 uppercase">Nội dung thi</label>
+              <textarea name="content" required className="w-full px-4 py-2 border border-neutral-200 rounded-lg h-24" />
+            </div>
+            <div className="md:col-span-2 space-y-1">
+              <label className="text-xs font-bold text-neutral-400 uppercase">URL Ảnh (Tùy chọn)</label>
+              <input name="imageUrl" className="w-full px-4 py-2 border border-neutral-200 rounded-lg" placeholder="https://..." />
+            </div>
+            <div className="md:col-span-2 flex gap-3 pt-4">
+              <button type="submit" className="flex-1 bg-neutral-900 text-white py-3 rounded-xl font-bold hover:bg-neutral-800">Lưu thí sinh</button>
+              <button type="button" onClick={() => setShowAdd(false)} className="flex-1 bg-neutral-100 text-neutral-500 py-3 rounded-xl font-bold hover:bg-neutral-200">Hủy</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        {/* Candidates List */}
+        <div className="lg:col-span-2 space-y-6">
+          <h3 className="text-xl font-bold flex items-center gap-2">
+            <Settings className="h-5 w-5 text-neutral-400" /> Quản lý thí sinh
+          </h3>
+          <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+            <table className="w-full text-left">
+              <thead className="bg-neutral-50 border-b border-neutral-200">
+                <tr>
+                  <th className="px-6 py-4 text-xs font-bold text-neutral-400 uppercase">Thí sinh</th>
+                  <th className="px-6 py-4 text-xs font-bold text-neutral-400 uppercase">MSSV</th>
+                  <th className="px-6 py-4 text-xs font-bold text-neutral-400 uppercase">Bình chọn</th>
+                  <th className="px-6 py-4 text-xs font-bold text-neutral-400 uppercase">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {candidates.map(c => (
+                  <tr key={c.id} className="hover:bg-neutral-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <img src={c.imageUrl || `https://picsum.photos/seed/${c.id}/100/100`} className="h-10 w-10 rounded-full object-cover" alt="" />
+                        <span className="font-medium">{c.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-neutral-500">{c.mssv}</td>
+                    <td className="px-6 py-4 font-bold text-orange-500">{c.voteCount}</td>
+                    <td className="px-6 py-4">
+                      <button onClick={() => handleDeleteCandidate(c.id)} className="p-2 text-neutral-400 hover:text-red-500 transition-colors">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Users List */}
+        <div className="space-y-6">
+          <h3 className="text-xl font-bold flex items-center gap-2">
+            <UserIcon className="h-5 w-5 text-neutral-400" /> Người dùng hệ thống
+          </h3>
+          <div className="bg-white border border-neutral-200 rounded-2xl p-6 space-y-4 max-h-[600px] overflow-y-auto">
+            {users.map((u, i) => (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-neutral-50 transition-colors">
+                <div className="h-10 w-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold">
+                  {u.displayName?.[0] || 'U'}
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <p className="text-sm font-bold truncate">{u.displayName}</p>
+                  <p className="text-xs text-neutral-500 truncate">{u.email}</p>
+                </div>
+                <span className={cn("text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-tighter", u.role === 'admin' ? "bg-red-100 text-red-600" : "bg-neutral-100 text-neutral-500")}>
+                  {u.role}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: candidates
+    // Fields: name, mssv, content, voteCount, imageUrl, createdAt
+    //
+    // Collection: votes
+    // Fields: userId, candidateId, date, timestamp
+    //
+    // Collection: users
+    // Fields: email, displayName, role
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "doandeqn123@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidCandidate(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.mssv is string && data.mssv.size() > 0 && data.mssv.size() < 20 &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 1000 &&
+             data.voteCount is number && data.voteCount >= 0;
+    }
+
+    function isValidVote(data) {
+      return data.userId == request.auth.uid &&
+             data.candidateId is string &&
+             data.date is string &&
+             data.timestamp is timestamp;
+    }
+
+    // Rules
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    match /candidates/{candidateId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voteCount']));
+    }
+
+    match /votes/{voteId} {
+      // voteId should be userId_date (e.g., "uid_2026-03-25")
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                    voteId == request.auth.uid + "_" + request.resource.data.date &&
+                    isValidVote(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+  }
+}

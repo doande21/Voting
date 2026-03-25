@@ -1,0 +1,5 @@
+{
+  "name": "Voting Portal",
+  "description": "A secure voting application with daily limits, Google/Facebook login, and candidate management.",
+  "requestFramePermissions": []
+}
