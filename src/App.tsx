@@ -62,28 +62,38 @@ export default function App() {
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeUserDoc: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          setUserData(userDoc.data() as UserData);
-        } else {
-          const newUserData: UserData = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            role: firebaseUser.email === 'doandeqn123@gmail.com' ? 'admin' : 'user'
-          };
-          await setDoc(doc(db, 'users', firebaseUser.uid), newUserData);
-          setUserData(newUserData);
-        }
+        // Real-time listener for current user's data
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        unsubscribeUserDoc = onSnapshot(userDocRef, async (snapshot) => {
+          if (snapshot.exists()) {
+            setUserData(snapshot.data() as UserData);
+          } else {
+            const newUserData: UserData = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              role: firebaseUser.email === 'doandeqn123@gmail.com' ? 'admin' : 'user'
+            };
+            await setDoc(userDocRef, newUserData);
+            setUserData(newUserData);
+          }
+          setLoading(false);
+        });
       } else {
         setUserData(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeUserDoc) unsubscribeUserDoc();
+    };
   }, []);
 
   // Candidates Listener
