@@ -256,7 +256,7 @@ function HomeView({ setView, candidates, setError }: { setView: (v: any) => void
       {/* Hero */}
       <section className="text-center space-y-6 py-12">
         <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-neutral-900">
-          CHỌN RA <span className="text-orange-500">NGƯỜI CHIẾN THẮNG</span>
+          BÌNH CHỌN <span className="text-orange-500">THÍ SINH ĐƯỢC YÊU THÍCH NHẤT</span>
         </h1>
         <p className="text-lg text-neutral-500 max-w-2xl mx-auto">
           Cổng bình chọn chính thức cho cuộc thi tài năng sinh viên. Mỗi tài khoản có 1 lượt bình chọn mỗi ngày.
