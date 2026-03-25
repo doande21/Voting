@@ -66,16 +66,6 @@ export default function App() {
   useEffect(() => {
     let unsubscribeUserDoc: (() => void) | null = null;
 
-    // Check for manual login in localStorage
-    const savedManualUser = localStorage.getItem('manual_user');
-    if (savedManualUser) {
-      const parsed = JSON.parse(savedManualUser);
-      setUser(parsed);
-      setUserData(parsed);
-      setLoading(false);
-      return;
-    }
-
     // Handle redirect result
     getRedirectResult(auth).catch(err => {
       console.error('Redirect login error:', err);
@@ -83,8 +73,6 @@ export default function App() {
     });
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (localStorage.getItem('manual_user')) return; // Ignore if manual user is active
-
       setUser(firebaseUser);
       if (firebaseUser) {
         // Real-time listener for current user's data
@@ -134,32 +122,8 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const handleLogin = async (provider: 'google' | 'facebook' | 'manual', manualData?: { name: string, mssv: string }) => {
+  const handleLogin = async (provider: 'google' | 'facebook') => {
     try {
-      if (provider === 'manual' && manualData) {
-        const manualId = `manual_${manualData.mssv}`;
-        const manualUser = {
-          uid: manualId,
-          email: `${manualData.mssv}@quick.login`,
-          displayName: manualData.name,
-          role: 'user' as const
-        };
-        
-        // Save to Firestore to ensure rules work (if they were authenticated)
-        // Note: Rules might block this if not authenticated, but we'll handle state locally
-        try {
-          await setDoc(doc(db, 'users', manualId), manualUser, { merge: true });
-        } catch (e) {
-          console.warn('Could not sync manual user to Firestore, continuing with local state');
-        }
-        
-        localStorage.setItem('manual_user', JSON.stringify(manualUser));
-        setUser(manualUser);
-        setUserData(manualUser);
-        setView('voting');
-        return;
-      }
-
       const p = provider === 'google' ? googleProvider : facebookProvider;
       
       // Use redirect for mobile, popup for desktop
@@ -178,7 +142,6 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    localStorage.removeItem('manual_user');
     await signOut(auth);
     setUser(null);
     setUserData(null);
@@ -414,21 +377,12 @@ function VotingView({ candidates, onVote, user }: { candidates: Candidate[], onV
   );
 }
 
-function LoginView({ onLogin, error }: { onLogin: (p: any, data?: any) => void, error: string | null }) {
-  const [name, setName] = useState('');
-  const [mssv, setMssv] = useState('');
-
-  const demoAccounts = [
-    { name: 'Nguyễn Văn A', mssv: 'SV001' },
-    { name: 'Trần Thị B', mssv: 'SV002' },
-    { name: 'Lê Văn C', mssv: 'SV003' },
-  ];
-
+function LoginView({ onLogin, error }: { onLogin: (p: any) => void, error: string | null }) {
   return (
     <div className="max-w-md mx-auto py-12 space-y-8">
       <div className="text-center space-y-2">
         <h2 className="text-3xl font-bold">Đăng nhập bình chọn</h2>
-        <p className="text-neutral-500">Chọn phương thức thuận tiện nhất cho bạn</p>
+        <p className="text-neutral-500">Sử dụng tài khoản Google hoặc Facebook để tiếp tục</p>
       </div>
       
       {error && (
@@ -437,62 +391,7 @@ function LoginView({ onLogin, error }: { onLogin: (p: any, data?: any) => void, 
         </div>
       )}
 
-      {/* Quick Login Form */}
-      <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-sm space-y-4">
-        <h3 className="font-bold text-lg">Đăng nhập trực tiếp</h3>
-        <div className="space-y-3">
-          <input 
-            type="text" 
-            placeholder="Họ và tên" 
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-          />
-          <input 
-            type="text" 
-            placeholder="Mã số sinh viên (MSSV)" 
-            value={mssv}
-            onChange={(e) => setMssv(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-          />
-          <button 
-            onClick={() => name && mssv && onLogin('manual', { name, mssv })}
-            disabled={!name || !mssv}
-            className="w-full bg-orange-500 text-white py-4 rounded-xl font-bold hover:bg-orange-600 disabled:opacity-50 transition-all"
-          >
-            Vào bình chọn ngay
-          </button>
-        </div>
-      </div>
-
-      {/* Demo Accounts List */}
-      <div className="space-y-3">
-        <p className="text-xs font-bold text-neutral-400 uppercase tracking-wider px-2">Hoặc chọn tài khoản mẫu</p>
-        <div className="grid grid-cols-1 gap-2">
-          {demoAccounts.map((acc) => (
-            <button 
-              key={acc.mssv}
-              onClick={() => onLogin('manual', acc)}
-              className="flex items-center justify-between p-4 bg-neutral-50 rounded-2xl border border-neutral-100 hover:border-orange-200 hover:bg-orange-50 transition-all group"
-            >
-              <div className="text-left">
-                <p className="font-bold text-neutral-900">{acc.name}</p>
-                <p className="text-xs text-neutral-500">{acc.mssv}</p>
-              </div>
-              <div className="h-8 w-8 rounded-full bg-white border border-neutral-200 flex items-center justify-center group-hover:border-orange-500 group-hover:text-orange-500 transition-all">
-                →
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-      
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-neutral-200"></span></div>
-        <div className="relative flex justify-center text-xs uppercase"><span className="bg-neutral-50 px-2 text-neutral-400 font-bold">Hoặc mạng xã hội</span></div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <button 
           onClick={() => onLogin('google')}
           className="flex items-center justify-center gap-2 bg-white border border-neutral-200 py-4 rounded-2xl font-bold hover:bg-neutral-50 transition-all shadow-sm"
