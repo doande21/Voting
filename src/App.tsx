@@ -123,17 +123,21 @@ export default function App() {
   }, []);
 
   const handleLogin = async (provider: 'google' | 'facebook') => {
+    setError(null);
     try {
       const p = provider === 'google' ? googleProvider : facebookProvider;
       
-      // Use redirect for mobile, popup for desktop
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
-      
-      if (isMobile) {
-        await signInWithRedirect(auth, p);
-      } else {
+      // Try popup first as it provides a better "overlay" experience.
+      // Fallback to redirect if the popup is blocked (common on mobile).
+      try {
         await signInWithPopup(auth, p);
         setView('voting');
+      } catch (popupErr: any) {
+        if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request') {
+          await signInWithRedirect(auth, p);
+        } else {
+          throw popupErr;
+        }
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -273,11 +277,10 @@ function HomeView({ setView, candidates, setError, user, handleLogin }: { setVie
               if (user) {
                 setView('voting');
               } else {
-                setError(null);
-                setView('login');
+                handleLogin('google');
               }
             }} 
-            className="bg-neutral-900 text-white px-10 py-4 rounded-full font-bold hover:bg-neutral-800 transition-all transform hover:scale-105 shadow-xl shadow-neutral-200"
+            className="bg-neutral-900 text-white px-12 py-5 rounded-full text-lg font-bold hover:bg-neutral-800 transition-all transform hover:scale-105 shadow-2xl shadow-neutral-300"
           >
             Bình chọn ngay
           </button>
