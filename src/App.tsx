@@ -223,9 +223,29 @@ export default function App() {
                   </button>
                 </div>
               ) : (
-                <button onClick={() => { setError(null); setView('login'); }} className="bg-orange-500 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-orange-600 transition-colors flex items-center gap-2">
-                  <LogIn className="h-4 w-4" /> Đăng nhập
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => handleLogin('google')} 
+                    className="bg-white border border-neutral-200 text-neutral-700 px-4 py-2 rounded-full text-xs font-bold hover:bg-neutral-50 transition-colors flex items-center gap-2 shadow-sm"
+                  >
+                    <svg className="h-3 w-3" viewBox="0 0 24 24">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    Google
+                  </button>
+                  <button 
+                    onClick={() => handleLogin('facebook')} 
+                    className="bg-[#1877F2] text-white px-4 py-2 rounded-full text-xs font-bold hover:bg-[#166fe5] transition-colors flex items-center gap-2 shadow-sm"
+                  >
+                    <svg className="h-3 w-3 fill-current" viewBox="0 0 24 24">
+                      <path d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.03 1.764-5.908 5.73-5.908 1.202 0 2.247.086 2.548.126v2.95h-1.745c-1.956 0-2.334.926-2.334 2.29v1.122h4.312l-.56 3.667h-3.752v7.98H9.101z"/>
+                    </svg>
+                    Facebook
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -233,7 +253,7 @@ export default function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {view === 'home' && <HomeView setView={setView} candidates={candidates} setError={setError} />}
+        {view === 'home' && <HomeView setView={setView} candidates={candidates} setError={setError} user={user} handleLogin={handleLogin} />}
         {view === 'voting' && <VotingView candidates={candidates} onVote={handleVote} user={user} />}
         {view === 'admin' && (userData?.role === 'admin' ? <AdminView candidates={candidates} /> : <div className="text-center py-20 text-neutral-500">Bạn không có quyền truy cập trang này.</div>)}
         {view === 'login' && <LoginView onLogin={handleLogin} error={error} />}
@@ -250,7 +270,7 @@ export default function App() {
 
 // --- View Components ---
 
-function HomeView({ setView, candidates, setError }: { setView: (v: any) => void, candidates: Candidate[], setError: (e: string | null) => void }) {
+function HomeView({ setView, candidates, setError, user, handleLogin }: { setView: (v: any) => void, candidates: Candidate[], setError: (e: string | null) => void, user: any, handleLogin: (p: 'google' | 'facebook') => void }) {
   const topCandidates = candidates.slice(0, 3);
 
   return (
@@ -265,9 +285,20 @@ function HomeView({ setView, candidates, setError }: { setView: (v: any) => void
           Cổng bình chọn chính thức cho cuộc thi tài năng sinh viên. Mỗi tài khoản có 1 lượt bình chọn mỗi ngày.
         </p>
         <div className="flex justify-center gap-4 pt-4">
-          <button onClick={() => { setError(null); setView('voting'); }} className="bg-neutral-900 text-white px-8 py-4 rounded-full font-bold hover:bg-neutral-800 transition-all transform hover:scale-105">
-            Bình chọn ngay
+          <button 
+            onClick={() => user ? setView('voting') : handleLogin('google')} 
+            className="bg-neutral-900 text-white px-8 py-4 rounded-full font-bold hover:bg-neutral-800 transition-all transform hover:scale-105"
+          >
+            {user ? 'Bình chọn ngay' : 'Đăng nhập với Google'}
           </button>
+          {!user && (
+            <button 
+              onClick={() => handleLogin('facebook')} 
+              className="bg-[#1877F2] text-white px-8 py-4 rounded-full font-bold hover:bg-[#166fe5] transition-all transform hover:scale-105"
+            >
+              Facebook
+            </button>
+          )}
         </div>
       </section>
 
